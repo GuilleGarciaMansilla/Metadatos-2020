@@ -1,0 +1,11 @@
+{
+  "name": "Obvserver",
+  "description": "Esta extensión muestra las cabeceras y los cuerpos de los archivos que se envian",
+  "version": "1.0",
+  "manifest_version": 2,
+  "permissions": ["background", "tabs", "webRequest", "webRequestBlocking", "*://*/*"],    
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  }  
+}
