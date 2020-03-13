@@ -38,7 +38,11 @@ function requestHandlerHeader(details){
           console.log("Header: ",details);
           if(stream.requestId == idRequest){
             console.log("Tenemos body ","ID: ",stream.requestId);
-            console.log("Body: ",stream)
+            console.log("Body: ",stream);
+            console.log("Fichero?: ",stream.requestBody.raw[0].bytes);
+            var enc = new TextDecoder("utf-8");
+            console.log("Bytes",enc.decode(stream.requestBody.raw[0].bytes));
+            
           }
         }
       }
