@@ -31,7 +31,7 @@ function requestHandlerHeader(details){
        //Filtramos los contenidos de la cabecera por content-type
       if(details.requestHeaders[i].name.toLowerCase() === 'content-type'){
         //Dentro de los content-type solamente queremos los multipart
-        if(details.requestHeaders[i].value.toLowerCase().includes("multipart/related") || details.requestHeaders[i].value.toLowerCase().includes("multipart/form-data")){
+        if(details.requestHeaders[i].value.toLowerCase().includes("multipart/related")){
           //Recogemos la id de la peticion para utilizarla en el body
           idRequest = details.requestId;
           console.log("Tenemos header ","ID: ",idRequest);
@@ -43,6 +43,16 @@ function requestHandlerHeader(details){
             var enc = new TextDecoder("utf-8");
             console.log("Bytes",enc.decode(stream.requestBody.raw[0].bytes));
             
+          }
+        }
+        else if( details.requestHeaders[i].value.toLowerCase().includes("multipart/form-data")){
+          idRequest = details.requestId;
+          console.log("Tenemos header ","ID: ",idRequest);
+          console.log("Header: ",details);
+          if(stream.requestId == idRequest){
+            console.log("Tenemos body ","ID: ",stream.requestId);
+            console.log("Body: ",stream);
+            console.log("Archivo: ", stream.requestBody.formData.fileToUpload[0]);
           }
         }
       }
