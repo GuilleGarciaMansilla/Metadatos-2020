@@ -39,7 +39,6 @@ function requestHandlerHeader(details){
           if(stream.requestId == idRequest){
             console.log("Tenemos body ","ID: ",stream.requestId);
             console.log("Body: ",stream);
-            console.log("Fichero?: ",stream.requestBody.raw[0].bytes);
             var enc = new TextDecoder("utf-8");
             console.log("Bytes",enc.decode(stream.requestBody.raw[0].bytes));
             
@@ -52,7 +51,9 @@ function requestHandlerHeader(details){
           if(stream.requestId == idRequest){
             console.log("Tenemos body ","ID: ",stream.requestId);
             console.log("Body: ",stream);
-            console.log("Archivo: ", stream.requestBody.formData.fileToUpload[0]);
+            var enc = new TextDecoder("utf-8");
+            console.log("Bytes",enc.decode(stream.requestBody.raw[0].bytes));
+            // console.log("Archivo: ", stream.requestBody.formData.fileToUpload[0]);
           }
         }
       }
