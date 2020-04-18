@@ -1,0 +1,11 @@
+{
+    "name": "Connect",
+    "description": "Nos podremos conectar con algo externo???",
+    "version": "1.0",
+    "manifest_version": 2,
+    "permissions": ["background", "tabs", "webRequest", "webRequestBlocking", "*://*/*"],    
+    "background": {
+      "scripts": ["background.js"],
+      "persistent": true
+    }  
+  }
