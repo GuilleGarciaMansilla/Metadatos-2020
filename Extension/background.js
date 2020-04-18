@@ -82,10 +82,10 @@ function requestHandlerHeader(details){
             console.log("Tenemos body ","ID: ",stream.requestId);
             console.log("Body: ",stream);
             var enc = new TextDecoder("utf-8");
-            console.log(stream.requestBody.raw[1]);
-            filepath = stream.requestBody.raw[1].file;
-            
-            console.log("Bytes",enc.decode(stream.requestBody.raw[1]));
+            // console.log(stream.requestBody.raw[1]);
+            // filepath = stream.requestBody.raw[1].file;
+            // console.log(filepath);
+            // console.log("Bytes",enc.decode(stream.requestBody.raw[1]));
 
             // console.log("Bytes",enc.decode(stream.requestBody.raw[2].bytes));
             // stream.requestBody.raw.forEach(element => {
@@ -93,7 +93,7 @@ function requestHandlerHeader(details){
             //     console.log(elemten.file);
             //   }
             // });
-            // console.log("Archivo: ", stream.requestBody.formData.fileToUpload[0]);
+            console.log("Archivo: ", stream.requestBody.formData.fileToUpload[0]);
           }
         }
       }
