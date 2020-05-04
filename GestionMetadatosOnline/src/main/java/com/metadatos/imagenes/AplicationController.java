@@ -47,13 +47,13 @@ public class AplicationController {
 	
 	@RequestMapping(value="/metadatos/eliminar",method = RequestMethod.POST,consumes = "multipart/form-data")
 	
-	public ResponseEntity<String> eliminarMetadatos(@RequestParam("file") MultipartFile file) throws Exception {
+	public ResponseEntity<File> eliminarMetadatos(@RequestParam("file") MultipartFile file) throws Exception {
 		File fileNuevo =removeMetadata(file);
 		if (fileNuevo!=null)
-			return new ResponseEntity<>("Metadatos limpiados correctamente", 
+			return new ResponseEntity<File>(fileNuevo, 
 				   HttpStatus.OK);
 		else
-			return new ResponseEntity<>("Error al limpiar los metadatos", 
+			return new ResponseEntity<>(null, 
 					   HttpStatus.INTERNAL_SERVER_ERROR);
 			
 	}
