@@ -19,22 +19,29 @@ TO DO LIST:
   1.- Separar datos por boundary y procesar la informacion en funcion de los datos en processB64                OK
   2.- Ver que tipo de peticiones envio con el fetch                                                             OK
   3.- Transformar archivo ???                                                                                   OK
-  4.- Salida de ficheros desde js                                                                               En progreso
-  5.- Cancelar peticiones                                                                                       Mas adelante
-  6.- Investigar sobre los siguentes tipos de multipart.                                                        Mas adelante
+  4.- Salida de ficheros desde js                                                                               OK
+  5.- Cancelar peticiones                                                                                       En progreso
+  6.- Investigar sobre los siguentes tipos de multipart.                                                        ??
+  7.- Interfaz                                                                                                  En progreso
 ENLACES:
   - (INFO SOBRE LOS TIPOS MULTIPART) https://es.wikipedia.org/wiki/Multipurpose_Internet_Mail_Extensions#Related
-  - (INFO GUAY) https://stackoverflow.com/questions/11621592/grab-file-with-chrome-extension-before-upload
-  - https://stackoverflow.com/questions/36067767/how-do-i-upload-a-file-with-the-js-fetch-api/50472925#50472925
-  - https://developer.mozilla.org/en-US/docs/Web/API/File/File
-  - https://docs.spring.io/spring/docs/3.0.6.RELEASE_to_3.1.0.BUILD-SNAPSHOT/3.1.0.BUILD-SNAPSHOT/org/springframework/web/multipart/MultipartFile.html
-  - https://gist.github.com/AshikNesin/ca4ad1ff1d24c26cb228a3fb5c72e0d5
+  - https://developers.google.com/drive/api/v3/manage-uploads
+  - https://cloud.google.com/storage/docs/performing-resumable-uploads#cancel-upload
+  - (GMAIL API) https://developers.google.com/gmail/api/guides/uploads#multipart
 */
-
 var idRequest; //Id de la petición
 var stream;  //Necesitamos guardar el body de la petición porque llega antes que las cabeceras (donde vamos a filtrar las peticiones)
-
+var metadata = "";
 //Funcion que pregunta al orquestador sobre donde está el microsericio limpiador y envia el archivo para realizar la limpieza de metadatos.
+function notification() {
+  var notifOptions = {
+    type: 'basic',
+    iconUrl: 'icon48.png',
+    title: 'Metadatos limpiados',
+    message: 'Se va a descargar una copia de su archivo sin metadatos a su carpeta de descargas'
+  }
+  chrome.notifications.create('limitNotif', notifOptions);
+}
 function postAndClean(formData, info) {
   //GET FROM DOCKER
   const url = "http://localhost:8085/formatos"; //Esta url puede cambiar segun donde este ubicado el orquestador
@@ -52,11 +59,40 @@ function postAndClean(formData, info) {
             return fetch(microservice, {
               method: 'POST',
               body: formData
-            }).then(res => {
-              if (res.ok) {
-                console.log("Data sent");
-              }
             })
+              .then(response => {
+                const reader = response.body.getReader();
+                return new ReadableStream({
+                  start(controller) {
+                    return pump();
+                    async function pump() {
+                      const { done, value } = await reader.read();
+                      // When no more data needs to be consumed, close the stream
+                      if (done) {
+                        controller.close();
+                        return;
+                      }
+                      // Enqueue the next data chunk into our target stream
+                      controller.enqueue(value);
+                      return pump();
+                    }
+                  }
+                })
+              })
+              .then(stream => new Response(stream))
+              .then(response => response.blob())
+              .then(blob => {
+                //Creamos un nuevo blob para añadir el type, que desde el microservicio viene vacio
+                blob.arrayBuffer().then(buffer => {
+                  var blob = new Blob([buffer], { type: info.type });
+                  console.log(blob);
+                  downloadFile(URL.createObjectURL(blob));
+                  notification();
+                })
+
+              })
+              .catch(err => console.error(err));
+
           }
           catch (error) {
             return console.log('Error: ', error);
@@ -65,6 +101,45 @@ function postAndClean(formData, info) {
       });
     });
 }
+async function getMetadataAsync(formData, info) {
+  const resp = await fetch('http://localhost:8080/metadatos/mostrar', {
+    method: 'POST',
+    body: formData
+  })
+    .then(response => {
+      const reader = response.body.getReader();
+      return new ReadableStream({
+        start(controller) {
+          return pump();
+          async function pump() {
+            const { done, value } = await reader.read();
+            // When no more data needs to be consumed, close the stream
+            if (done) {
+              controller.close();
+              return;
+            }
+            // Enqueue the next data chunk into our target stream
+            controller.enqueue(value);
+            return pump();
+          }
+        }
+      })
+    })
+    .then(stream => new Response(stream))
+    .then(response => response.text())
+    .then(meta => {
+      return meta;
+    })
+    .catch(err => console.error(err))
+  return resp;
+}
+function getMetadata(formData,info){
+  var request = new XMLHttpRequest();
+  request.open("POST", "http://localhost:8080/metadatos/mostrar",false);
+  request.send(formData);
+  return request.responseText;
+}
+
 //Esta funcion realiza una conversión de un string en base 64 a ArrayBuffer
 function _base64ToArrayBuffer(base64) {
   var binary_string = atob(base64);
@@ -76,7 +151,7 @@ function _base64ToArrayBuffer(base64) {
   return bytes.buffer;
 }
 
-//Esta funcion trocea la información de la petición para recoger la información util. Devuelve el titulo, el tipo de archivo y el archivo(en base 64)
+//Esta funcion trocea la información de la petición para recoger la información util. Devuelve el encode , el tipo de archivo y el archivo(en base 64)
 function processInfoFile(data) {
   var slices = data.split("\r\n");
   var boundary = slices[0];
@@ -123,9 +198,14 @@ function processInfoFile(data) {
   }
   return array;
 }
-
-
-//Funcion callback del action listener de onBeforeRequest
+function downloadFile(url) {
+  // Descargar el archivo
+  chrome.downloads.download({
+    url: url,
+    filename: "limpio.png"
+  });
+}
+//Funcion callback del action listener de onBeforeRequest 
 function requestHandlerBody(details) {
   if (details.method == "POST") {
     stream = details;
@@ -138,13 +218,13 @@ function requestHandlerHeader(details) {
   for (var i = 0; i < details.requestHeaders.length; ++i) {
     //Filtramos las cabeceras POST
     if (details.method == "POST") {
-
       //Filtramos los contenidos de la cabecera por content-type
       if (details.requestHeaders[i].name.toLowerCase() === 'content-type') {
 
         //Dentro de los content-type solamente queremos los multipart
-        if (details.requestHeaders[i].value.toLowerCase().includes("multipart/related")) {
 
+        if (details.requestHeaders[i].value.toLowerCase().includes("multipart/related")) {
+          clean = false;
           //Recogemos la id de la peticion para utilizarla en el body
           idRequest = details.requestId;
           console.log("Tenemos header ", "ID: ", idRequest);
@@ -162,7 +242,8 @@ function requestHandlerHeader(details) {
 
             // Procesamos el body una vez decodificado
             var infoFiles = processInfoFile(data);
-            infoFiles.forEach(e => {
+            //Cada fichero se envia por separado
+            infoFiles.forEach(async (e) => {
               var arrayBuffer;
               if (e.encode == "base64") {
                 arrayBuffer = _base64ToArrayBuffer(e.file);
@@ -174,52 +255,59 @@ function requestHandlerHeader(details) {
               //Para enviar archivos bajo la cabecera multipart se deben procesar con un formData
               var formData = new FormData();
               formData.append('file', blob);
+              // console.log("original", blob, URL.createObjectURL(blob))
 
               //Mandamos los datos al microservicio limpiador
-              postAndClean(formData, e);
+              //----------------------------Asincrono----------------------
+              getMetadataAsync(formData,e).then(res =>{
+                console.log("async",res); 
+              })
+              //----------------------------Fin asincrono--------------------
+              //------------------Sincrono-----------------------
+              // var meta = getMetadata(formData, e);
+              // console.log('r',meta);
+              //-------------------Fin sincrono------------------
+              clean = confirm('Este archivo contiene los siguientes metadatos: \n' + "" + '\n ¿Se desea eliminar estos metadatos?');
+              if (clean) {
+                //postAndClean(formData, e);
+              }
             });
           }
+          if (clean) { chrome.tabs.reload(); }
+          return { cancel: clean };
         }
-        else if (details.requestHeaders[i].value.toLowerCase().includes("multipart/form-data")) {
-          idRequest = details.requestId;
-          console.log("Tenemos header form", "ID: ", idRequest);
-          console.log("Header: ", details);
-          if (stream.requestId == idRequest) {
-            console.log("Tenemos body form", "ID: ", stream.requestId);
-            console.log("Body: ", stream);
-            var enc = new TextDecoder("utf-8");
-            var formData = new FormData();
-            formData.append("file", new Blob([stream.requestBody.raw[0]]));
-            // console.log(formData);
-            // console.log(stream.requestBody.raw[1]);
-            // filepath = stream.requestBody.raw[1].file;
-            // console.log(filepath);
-            // console.log("Bytes",enc.decode(stream.requestBody.raw[1]));
+        // else if (details.requestHeaders[i].value.toLowerCase().includes("multipart/form-data")) {
+        //   idRequest = details.requestId;
+        //   console.log("Tenemos header form", "ID: ", idRequest);
+        //   console.log("Header: ", details);
+        //   if (stream.requestId == idRequest) {
+        //     console.log("Tenemos body form", "ID: ", stream.requestId);
+        //     console.log("Body: ", stream);
+        //     console.log(JSON.stringify(stream.requestBody))
 
-            // console.log("Bytes0",enc.decode(stream.requestBody.raw[0].bytes));
-            // console.log("Bytes0",enc.decode(stream.requestBody.raw[2].bytes));
-            // stream.requestBody.raw.forEach(element => {
-            //   if(element == "file"){
-            //     console.log(elemten.file);
-            //   }
-            // });
-          }
-        }
+        //     var enc = new TextDecoder("utf-8");
+        //     console.log(enc.decode(stream.requestBody[0],stream.requestBody[2]));
+        //     console.log(details.url);
+
+        //   }
+        //   // return{cancel:true}
+        // }
+
       }
+      // else if (details.url.includes("upload_protocol=resumable")) {
+      //     console.log(stream);
+      //     console.log(stream.requestBody);
+
+      // }
     }
 
   }
 
 }
+
 //Funcion callback del action listener de onHeadersReceived
 function requestHandlerHeaderRcv(details) {
-  //  console.log("Headers:", details);
-  for (var i = 0; i < details.responseHeaders.length; ++i) {
-    if (details.responseHeaders[i].name === 'content-type') {
-      console.log(details.responseHeaders[i].value);
-    }
-
-  }
+  console.log("RCV:", details);
 }
 
 //,types: ["xmlhttprequest"]
@@ -245,15 +333,4 @@ function removeListeners() {
   chrome.webRequest.onBeforeRequest.removeListener(requestHandlerBody);
   // chrome.webRequest.onCompleted.removeListener(requestHandler);
 }
-// //Con esta funcion igual se puede llegar a ver el body a trozos//prototipo!!!!!!!!
-// function onBeforeRequestHandler(req) {
-
-//   if (req.requestBody && req.requestBody.raw) {
-//     var requestBody = req.requestBody.raw.map(function (data) {
-//       return decodeURIComponent(String.fromCharCode.apply(null, new Uint8Array(data.bytes)));
-//     }).join('')
-//     console.log(requestBody);
-//   }
-
-// }
 setListeners();

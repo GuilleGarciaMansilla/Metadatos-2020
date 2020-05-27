@@ -3,7 +3,7 @@
   "description": "Con esta extensión activa todos los archivos que envies son recogidos y enviados a un servicio limiador de metadatos, guardando el archivo sin metadatos en el PC. (Solamente disponible con Google Drive)",
   "version": "1.0",
   "manifest_version": 2,
-  "permissions": ["background", "tabs", "webRequest", "webRequestBlocking", "*://*/*"],    
+  "permissions": ["background", "tabs", "webRequest", "webRequestBlocking", "*://*/*","downloads","input","notifications"],    
   "background": {
     "scripts": ["background.js"],
     "persistent": true
