@@ -29,6 +29,7 @@ ENLACES:
   - https://cloud.google.com/storage/docs/performing-resumable-uploads#cancel-upload
   - (GMAIL API) https://developers.google.com/gmail/api/guides/uploads#multipart
 */
+var filetypes = [];
 var idRequest; //Id de la petición
 var stream;  //Necesitamos guardar el body de la petición porque llega antes que las cabeceras (donde vamos a filtrar las peticiones)
 var metadata = "";
@@ -42,67 +43,11 @@ function notification() {
   }
   chrome.notifications.create('limitNotif', notifOptions);
 }
+
 function postAndClean(formData, info) {
   //GET FROM DOCKER
-  const url = "http://localhost:8085/formatos"; //Esta url puede cambiar segun donde este ubicado el orquestador
-  var microservice = "";
-  fetch(url)
-    .then(res => {
-      return res.json();
-    })
-    .then(data => {
-      data.forEach(async element => {
-        if (info.type.includes(element.nombre)) {
-          microservice = element.url;
-          try {
-            //POST TO MS
-            return fetch(microservice, {
-              method: 'POST',
-              body: formData
-            })
-              .then(response => {
-                const reader = response.body.getReader();
-                return new ReadableStream({
-                  start(controller) {
-                    return pump();
-                    async function pump() {
-                      const { done, value } = await reader.read();
-                      // When no more data needs to be consumed, close the stream
-                      if (done) {
-                        controller.close();
-                        return;
-                      }
-                      // Enqueue the next data chunk into our target stream
-                      controller.enqueue(value);
-                      return pump();
-                    }
-                  }
-                })
-              })
-              .then(stream => new Response(stream))
-              .then(response => response.blob())
-              .then(blob => {
-                //Creamos un nuevo blob para añadir el type, que desde el microservicio viene vacio
-                blob.arrayBuffer().then(buffer => {
-                  var blob = new Blob([buffer], { type: info.type });
-                  console.log(blob);
-                  downloadFile(URL.createObjectURL(blob));
-                  notification();
-                })
-
-              })
-              .catch(err => console.error(err));
-
-          }
-          catch (error) {
-            return console.log('Error: ', error);
-          }
-        }
-      });
-    });
-}
-async function getMetadataAsync(formData, info) {
-  const resp = await fetch('http://localhost:8080/metadatos/mostrar', {
+  microservice = getUrl(info);
+  return fetch(microservice, {
     method: 'POST',
     body: formData
   })
@@ -126,18 +71,61 @@ async function getMetadataAsync(formData, info) {
       })
     })
     .then(stream => new Response(stream))
-    .then(response => response.text())
-    .then(meta => {
-      return meta;
+    .then(response => response.blob())
+    .then(blob => {
+      //Creamos un nuevo blob para añadir el type, que desde el microservicio viene vacio
+      blob.arrayBuffer().then(buffer => {
+        var blob = new Blob([buffer], { type: info.type });
+        console.log(blob);
+        downloadFile(URL.createObjectURL(blob));
+        notification();
+      })
+
     })
-    .catch(err => console.error(err))
-  return resp;
+    .catch(err => console.error(err));
 }
-function getMetadata(formData,info){
+//Funcion que devuelve metadatos hecha de forma asincrona
+// async function getMetadataAsync(formData, info) {
+//   const resp = await fetch('http://localhost:8080/metadatos/mostrar', {
+//     method: 'POST',
+//     body: formData
+//   })
+//     .then(response => {
+//       const reader = response.body.getReader();
+//       return new ReadableStream({
+//         start(controller) {
+//           return pump();
+//           async function pump() {
+//             const { done, value } = await reader.read();
+//             // When no more data needs to be consumed, close the stream
+//             if (done) {
+//               controller.close();
+//               return;
+//             }
+//             // Enqueue the next data chunk into our target stream
+//             controller.enqueue(value);
+//             return pump();
+//           }
+//         }
+//       })
+//     })
+//     .then(stream => new Response(stream))
+//     .then(response => response.text())
+//     .then(meta => {
+//       return meta;
+//     })
+//     .catch(err => console.error(err))
+//   return resp;
+// }
+function getMetadata(formData, info) {
   var request = new XMLHttpRequest();
-  request.open("POST", "http://localhost:8080/metadatos/mostrar",false);
-  request.send(formData);
-  return request.responseText;
+  var url = getUrlMeta(info);
+  if (url != "") {
+    request.open("POST", url , false);
+    request.send(formData);
+    return request.responseText;
+  }
+  return false;
 }
 
 //Esta funcion realiza una conversión de un string en base 64 a ArrayBuffer
@@ -224,6 +212,7 @@ function requestHandlerHeader(details) {
         //Dentro de los content-type solamente queremos los multipart
 
         if (details.requestHeaders[i].value.toLowerCase().includes("multipart/related")) {
+          
           clean = false;
           //Recogemos la id de la peticion para utilizarla en el body
           idRequest = details.requestId;
@@ -244,32 +233,49 @@ function requestHandlerHeader(details) {
             var infoFiles = processInfoFile(data);
             //Cada fichero se envia por separado
             infoFiles.forEach(async (e) => {
-              var arrayBuffer;
-              if (e.encode == "base64") {
-                arrayBuffer = _base64ToArrayBuffer(e.file);
+              var found = false;
+              var i = 0;
+              //Si el tipo de fichero está disponible en nuestras bases de datos podemos continuar 
+              while (!found && i < filetypes.length) {
+                if (e.type == filetypes[i].nombre) {
+                  found = true;
+                }
+                i++;
               }
+              if (!found) {
+                //Notificamos al usuario que no se puede continuar
+                alert("La extensión " + e.type + " no es compatible con nuestra extensión.")
+                clean = false;
+              }
+              else {
+                var arrayBuffer;
+                if (e.encode == "base64") {
+                  arrayBuffer = _base64ToArrayBuffer(e.file);
+                }
 
-              //Creamos un archivo binario a partir del body decodificado y procesado
-              var blob = new Blob([arrayBuffer], { type: e.type });
+                //Creamos un archivo binario a partir del body decodificado y procesado
+                var blob = new Blob([arrayBuffer], { type: e.type });
 
-              //Para enviar archivos bajo la cabecera multipart se deben procesar con un formData
-              var formData = new FormData();
-              formData.append('file', blob);
-              // console.log("original", blob, URL.createObjectURL(blob))
+                //Para enviar archivos bajo la cabecera multipart se deben procesar con un formData
+                var formData = new FormData();
+                formData.append('file', blob);
+                // console.log("original", blob, URL.createObjectURL(blob))
 
-              //Mandamos los datos al microservicio limpiador
-              //----------------------------Asincrono----------------------
-              getMetadataAsync(formData,e).then(res =>{
-                console.log("async",res); 
-              })
-              //----------------------------Fin asincrono--------------------
-              //------------------Sincrono-----------------------
-              // var meta = getMetadata(formData, e);
-              // console.log('r',meta);
-              //-------------------Fin sincrono------------------
-              clean = confirm('Este archivo contiene los siguientes metadatos: \n' + "" + '\n ¿Se desea eliminar estos metadatos?');
-              if (clean) {
-                //postAndClean(formData, e);
+                //Mandamos los datos al microservicio limpiador
+                //----------------------------Asincrono----------------------
+                // getMetadataAsync(formData,e).then(res =>{
+                //   console.log("async",res); 
+                // })
+                //----------------------------Fin asincrono--------------------
+                //------------------Sincrono-----------------------
+
+                var meta = getMetadata(formData, e);
+                console.log('Sincrono', meta);
+                //-------------------Fin sincrono------------------
+                clean = confirm('Este archivo contiene los siguientes metadatos: \n' + meta + '\n ¿Se desea eliminar estos metadatos?');
+                if (clean) {
+                  postAndClean(formData, e);
+                }
               }
             });
           }
@@ -304,7 +310,35 @@ function requestHandlerHeader(details) {
   }
 
 }
+function getUrlMeta(info) {
+  var found = false;
+  var i = 0;
+  var url = "";
 
+  while (!found && i < filetypes.length) {
+    if (filetypes[i].nombre == info.type) {
+      url = filetypes[i].metadata;
+      found = true;
+    }
+    i++;
+  }
+  console.log(url);
+  return url;
+}
+function getUrl(info) {
+  var found = false;
+  var i = 0;
+  var url = "";
+
+  while (!found && i < filetypes.length) {
+    if (filetypes[i].nombre == info.type) {
+      url = filetypes[i].url;
+      found = true;
+    }
+    i++;
+  }
+  return url;
+}
 //Funcion callback del action listener de onHeadersReceived
 function requestHandlerHeaderRcv(details) {
   console.log("RCV:", details);
@@ -333,4 +367,20 @@ function removeListeners() {
   chrome.webRequest.onBeforeRequest.removeListener(requestHandlerBody);
   // chrome.webRequest.onCompleted.removeListener(requestHandler);
 }
-setListeners();
+async function viewTypes() {
+  const url = "http://localhost:8085/formatos"; //Esta url puede cambiar segun donde este ubicado el orquestador
+  await fetch(url).then(res => {
+    return res.json();
+  }).then(data => {
+    data.forEach(element => {
+      var aux ={"nombre": String(element.nombre),"url":String(element.url),"metadata":String(element.metadata)}
+      filetypes.push(aux);
+    })
+  })
+}
+async function start() {
+  await viewTypes();
+  console.log(filetypes)
+  setListeners();
+}
+start();
