@@ -39,8 +39,15 @@ public class AplicationController {
 	private String mostrarMetadatos(MultipartFile file) throws Exception {
 		File multToFile =convertToFile(file);
 		Map<Tag, String> meta =process(multToFile, null);
+		Map<Tag, String> metaNuevo = new HashMap<>();
+		for (Map.Entry<Tag, String> entry : meta.entrySet()) {
+			   if(entry.getValue()!=null && !entry.getValue().isEmpty() || !entry.getValue().equals("0")) {
+				   System.out.println("clave=" + entry.getKey() + ", valor=" + entry.getValue());
+			   	   metaNuevo.put(entry.getKey(), entry.getValue());
+				}
+		}
 		ObjectMapper objectMapper = new ObjectMapper();
-	    String metadatos = objectMapper.writeValueAsString(meta);
+	    String metadatos = objectMapper.writeValueAsString(metaNuevo);
 		return metadatos;
 	}
 		
@@ -62,8 +69,15 @@ public class AplicationController {
 	public File removeMetadata(MultipartFile file)
 			   throws Exception {
 	   File fileMetadataRemoved =convertToFile(file);
-       Map<Tag, String> meta = new HashMap<>();
-       meta.put(StandardTag.TITLE, "0");
+	   Map<Tag, String> metalectura =process(fileMetadataRemoved, null);
+	   Map<Tag, String> meta = new HashMap<>();
+	   for (Map.Entry<Tag, String> entry : metalectura.entrySet()) {
+		   if(entry.getValue()!=null && !entry.getValue().isEmpty() || !entry.getValue().equals("0"))
+		    System.out.println("clave=" + entry.getKey() + ", valor=" + entry.getValue());
+		   	meta.put(entry.getKey(), "0");
+	   }
+       
+      /* meta.put(StandardTag.TITLE, "0");
        meta.put(StandardTag.COPYRIGHT, "0");
        meta.put(StandardTag.ISO, "0");
        meta.put(StandardTag.IMAGE_WIDTH, "0");
@@ -163,7 +177,7 @@ public class AplicationController {
        meta.put(StandardTag.COPYRIGHT_NOTICE, "0");
        meta.put(StandardTag.FILE_TYPE, "0");
        meta.put(StandardTag.AVG_BITRATE, "0");
-	   meta.put(StandardTag.MIME_TYPE, "0");
+	   meta.put(StandardTag.MIME_TYPE, "0");*/
 	   process(fileMetadataRemoved, meta);
 	   return fileMetadataRemoved;
 	 }
