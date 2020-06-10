@@ -14,6 +14,7 @@ import com.thebuzzmedia.exiftool.core.StandardTag;
 import com.thebuzzmedia.exiftool.ExifToolBuilder;
 import com.thebuzzmedia.exiftool.Tag;
 import java.io.File;
+import java.nio.file.Files;
 import java.util.Map;
 import static java.util.Arrays.asList;
 import java.util.HashMap;
@@ -54,10 +55,11 @@ public class AplicationController {
 	
 	@RequestMapping(value="/metadatos/eliminar",method = RequestMethod.POST,consumes = "multipart/form-data")
 	
-	public ResponseEntity<File> eliminarMetadatos(@RequestParam("file") MultipartFile file) throws Exception {
+	public ResponseEntity<byte[]> eliminarMetadatos(@RequestParam("file") MultipartFile file) throws Exception {
 		File fileNuevo =removeMetadata(file);
-		if (fileNuevo!=null)
-			return new ResponseEntity<File>(fileNuevo, 
+		byte[] fileContent = Files.readAllBytes(fileNuevo.toPath());
+		if (fileContent!=null)
+			return new ResponseEntity<byte[]>(fileContent, 
 				   HttpStatus.OK);
 		else
 			return new ResponseEntity<>(null, 
