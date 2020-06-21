@@ -18,11 +18,15 @@ public class Formato {
 	@Column(name="url", nullable=false)
 	private String url;
 	
+	@Column(name="metadata", nullable=false)
+	private String metadata;
+	
 	public Formato() {}
 	
-	public Formato(String nombre, String url) {
+	public Formato(String nombre, String url,String metadata) {
 		this.nombre = nombre;
 		this.url = url;
+		this.metadata = metadata;
 	}
 
 	public String getNombre() {
@@ -32,13 +36,19 @@ public class Formato {
 	public void setNombre(String nombre) {
 		this.nombre = nombre;
 	}
-	
+
 	public String getUrl() {
 		return url;
 	}
 	
 	public void setUrl(String url) {
 		this.url = url;
+	}
+	public String getMetadata() {
+		return metadata;
+	}
+	public void setMetadata(String metadata) {
+		this.metadata =  metadata;
 	}
 	
 }
