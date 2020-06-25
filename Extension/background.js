@@ -1,39 +1,9 @@
-/*
-Orden de ejecucion:
-
-1.onBeforeRequest
-2.onBeforeSendHeaders
-3.onSendHeaders
-4.onHeadersReceived
-
-5.onAuthRequired
-6.onBeforeRedirect
-7.onResponseStarted
-
-8.onCompleted
-
-*/
-
-/*
-TO DO LIST:
-  1.- Separar datos por boundary y procesar la informacion en funcion de los datos en processB64                OK
-  2.- Ver que tipo de peticiones envio con el fetch                                                             OK
-  3.- Transformar archivo ???                                                                                   OK
-  4.- Salida de ficheros desde js                                                                               OK
-  5.- Cancelar peticiones                                                                                       En progreso
-  6.- Investigar sobre los siguentes tipos de multipart.                                                        ??
-  7.- Interfaz                                                                                                  En progreso
-ENLACES:
-  - (INFO SOBRE LOS TIPOS MULTIPART) https://es.wikipedia.org/wiki/Multipurpose_Internet_Mail_Extensions#Related
-  - https://developers.google.com/drive/api/v3/manage-uploads
-  - https://cloud.google.com/storage/docs/performing-resumable-uploads#cancel-upload
-  - (GMAIL API) https://developers.google.com/gmail/api/guides/uploads#multipart
-*/
 var filetypes = [];
-var idRequest; //Id de la petición
-var stream;  //Necesitamos guardar el body de la petición porque llega antes que las cabeceras (donde vamos a filtrar las peticiones)
+var idRequest; //Id of the request
+var stream;  //The body has to be loaded because it reaches the extension before the headers (where the request are being filtered)
 var metadata = "";
-//Funcion que pregunta al orquestador sobre donde está el microsericio limpiador y envia el archivo para realizar la limpieza de metadatos.
+
+//Function that pops a notification 
 function notification() {
   var notifOptions = {
     type: 'basic',
@@ -44,6 +14,7 @@ function notification() {
   chrome.notifications.create('limitNotif', notifOptions);
 }
 
+//Sends a file to the microservice and recieve a free metadata file
 function postAndClean(formData, info) {
   //GET FROM DOCKER
   microservice = getUrl(info);
@@ -73,18 +44,20 @@ function postAndClean(formData, info) {
     .then(stream => new Response(stream))
     .then(response => response.blob())
     .then(blob => {
-      //Creamos un nuevo blob para añadir el type, que desde el microservicio viene vacio
+      //New blob is created since the type is empty
       blob.arrayBuffer().then(buffer => {
         var blob = new Blob([buffer], { type: info.type });
         console.log(blob);
-        downloadFile(URL.createObjectURL(blob));
+        downloadFile(URL.createObjectURL(blob),info.type);
         notification();
       })
 
     })
     .catch(err => console.error(err));
 }
-//Funcion que devuelve metadatos hecha de forma asincrona
+
+//Metadata query asychnronusly (not functional)
+
 // async function getMetadataAsync(formData, info) {
 //   const resp = await fetch('http://localhost:8080/metadatos/mostrar', {
 //     method: 'POST',
@@ -117,6 +90,8 @@ function postAndClean(formData, info) {
 //     .catch(err => console.error(err))
 //   return resp;
 // }
+
+//Synchronus function. Metadata query
 function getMetadata(formData, info) {
   var request = new XMLHttpRequest();
   var url = getUrlMeta(info);
@@ -128,7 +103,6 @@ function getMetadata(formData, info) {
   return false;
 }
 
-//Esta funcion realiza una conversión de un string en base 64 a ArrayBuffer
 function _base64ToArrayBuffer(base64) {
   var binary_string = atob(base64);
   var len = binary_string.length;
@@ -139,7 +113,7 @@ function _base64ToArrayBuffer(base64) {
   return bytes.buffer;
 }
 
-//Esta funcion trocea la información de la petición para recoger la información util. Devuelve el encode , el tipo de archivo y el archivo(en base 64)
+//Slice the information from the request to select just useful information. Returns the encode, type of file and the file(base64)
 function processInfoFile(data) {
   var slices = data.split("\r\n");
   var boundary = slices[0];
@@ -151,11 +125,10 @@ function processInfoFile(data) {
   var file = "";
 
   var hayFichero = false;
-  //Este while busca boundarys, cuando los encuentra se recorren con el siguiente while (pero solamente se recorre una vez).
+  //Finds boundary
   while (i < slices.length) {
     if (slices[i].includes(boundary)) {
       i++;
-      //Recorro cada trozo rodeado por boundary independientemente
       while (i < slices.length && !slices[i].includes(boundary)) {
         if (slices[i].includes("content-transfer-encoding")) {
           encode = slices[i].split(": ")[1];
@@ -170,7 +143,7 @@ function processInfoFile(data) {
         }
         i++;
       }
-      //Para separar ficheros independientes dentro de una peticion, los guardo cada uno en una posicion de ese array
+      //Each file on an array position (multi uploads)
       if (hayFichero) {
         array.push({
           'encode': encode,
@@ -186,35 +159,37 @@ function processInfoFile(data) {
   }
   return array;
 }
-function downloadFile(url) {
-  // Descargar el archivo
+
+//This function downloads a copy of the file
+function downloadFile(url,type) {
+  var format = type.split("/")[1];
   chrome.downloads.download({
     url: url,
-    filename: "limpio.png"
+    filename: "limpio."+format
   });
 }
-//Funcion callback del action listener de onBeforeRequest 
+//Callback function from onBeforeRequest 
 function requestHandlerBody(details) {
   if (details.method == "POST") {
     stream = details;
   }
 
 }
-//Funcion callback del action listener de onBeforeSendHeaders
+//Callback function from onBeforeSendHeaders
 function requestHandlerHeader(details) {
 
   for (var i = 0; i < details.requestHeaders.length; ++i) {
-    //Filtramos las cabeceras POST
+    //Filter POST headers
     if (details.method == "POST") {
-      //Filtramos los contenidos de la cabecera por content-type
+      //Filter the content-type
       if (details.requestHeaders[i].name.toLowerCase() === 'content-type') {
 
-        //Dentro de los content-type solamente queremos los multipart
+        //Filter "multipart/related" content-type
 
         if (details.requestHeaders[i].value.toLowerCase().includes("multipart/related")) {
           
           clean = false;
-          //Recogemos la id de la peticion para utilizarla en el body
+          //Catch id to match the body ID
           idRequest = details.requestId;
           console.log("Tenemos header ", "ID: ", idRequest);
           console.log("Header: ", details);
@@ -222,20 +197,19 @@ function requestHandlerHeader(details) {
             console.log("Tenemos body ", "ID: ", stream.requestId);
             console.log("Body: ", stream);
 
-            //Decodificamos el body
+            //Decode the body
             var enc = new TextDecoder("utf-8");
             var data = "";
             stream.requestBody.raw.forEach(e => {
               data += enc.decode(e.bytes);
             })
 
-            // Procesamos el body una vez decodificado
+            // Process the body
             var infoFiles = processInfoFile(data);
-            //Cada fichero se envia por separado
             infoFiles.forEach(async (e) => {
               var found = false;
               var i = 0;
-              //Si el tipo de fichero está disponible en nuestras bases de datos podemos continuar 
+              //If the type of file is avaliable on our system the cleaning of the file can be done
               while (!found && i < filetypes.length) {
                 if (e.type == filetypes[i].nombre) {
                   found = true;
@@ -243,35 +217,35 @@ function requestHandlerHeader(details) {
                 i++;
               }
               if (!found) {
-                //Notificamos al usuario que no se puede continuar
+                //Notify the user that this file type is not compatible
                 alert("La extensión " + e.type + " no es compatible con nuestra extensión.")
                 clean = false;
               }
               else {
                 var arrayBuffer;
-                if (e.encode == "base64") {
+                if (e.encode == "base64") { 
                   arrayBuffer = _base64ToArrayBuffer(e.file);
                 }
 
-                //Creamos un archivo binario a partir del body decodificado y procesado
+                //Binary object is created from an ArrayBuffer and the content type
                 var blob = new Blob([arrayBuffer], { type: e.type });
 
-                //Para enviar archivos bajo la cabecera multipart se deben procesar con un formData
+                //formData can be send as multipart/form-data header
                 var formData = new FormData();
                 formData.append('file', blob);
                 // console.log("original", blob, URL.createObjectURL(blob))
 
-                //Mandamos los datos al microservicio limpiador
-                //----------------------------Asincrono----------------------
+                //Send the file to the cleaning microservices
+
+                //----------------------------Asynchronus----------------------
                 // getMetadataAsync(formData,e).then(res =>{
                 //   console.log("async",res); 
                 // })
-                //----------------------------Fin asincrono--------------------
-                //------------------Sincrono-----------------------
-
+                //---------------------------- Asynchronus--------------------
+                
+                //------------------Synchronus-----------------------
                 var meta = getMetadata(formData, e);
                 console.log('Sincrono', meta);
-                //-------------------Fin sincrono------------------
                 clean = confirm('Este archivo contiene los siguientes metadatos: \n' + meta + '\n ¿Se desea eliminar estos metadatos?');
                 if (clean) {
                   postAndClean(formData, e);
@@ -282,29 +256,10 @@ function requestHandlerHeader(details) {
           if (clean) { chrome.tabs.reload(); }
           return { cancel: clean };
         }
-        // else if (details.requestHeaders[i].value.toLowerCase().includes("multipart/form-data")) {
-        //   idRequest = details.requestId;
-        //   console.log("Tenemos header form", "ID: ", idRequest);
-        //   console.log("Header: ", details);
-        //   if (stream.requestId == idRequest) {
-        //     console.log("Tenemos body form", "ID: ", stream.requestId);
-        //     console.log("Body: ", stream);
-        //     console.log(JSON.stringify(stream.requestBody))
-
-        //     var enc = new TextDecoder("utf-8");
-        //     console.log(enc.decode(stream.requestBody[0],stream.requestBody[2]));
-        //     console.log(details.url);
-
-        //   }
-        //   // return{cancel:true}
-        // }
+        
 
       }
-      // else if (details.url.includes("upload_protocol=resumable")) {
-      //     console.log(stream);
-      //     console.log(stream.requestBody);
-
-      // }
+     
     }
 
   }
@@ -368,7 +323,7 @@ function removeListeners() {
   // chrome.webRequest.onCompleted.removeListener(requestHandler);
 }
 async function viewTypes() {
-  const url = "http://localhost:8085/formatos"; //Esta url puede cambiar segun donde este ubicado el orquestador
+  const url = "http://localhost:8085/formatos"; //This URL can be changed depending on where the Orchestrator is
   await fetch(url).then(res => {
     return res.json();
   }).then(data => {
