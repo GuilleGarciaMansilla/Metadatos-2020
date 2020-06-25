@@ -13,32 +13,42 @@ public class Formato {
 	
 	@Id
 	@Column(name="nombre", nullable=false)
-	private String nombre;
+	private String name;
 	
 	@Column(name="url", nullable=false)
-	private String url;
+	private String eliminationURL;
+	
+	@Column(name="metadata", nullable=false)
+	private String consultURL;
 	
 	public Formato() {}
 	
-	public Formato(String nombre, String url) {
-		this.nombre = nombre;
-		this.url = url;
+	public Formato(String name, String eliminationURL,String consultURL) {
+		this.name = name;
+		this.eliminationURL = eliminationURL;
+		this.consultURL = consultURL;
 	}
 
 	public String getNombre() {
-		return nombre;
+		return name;
 	}
 	
-	public void setNombre(String nombre) {
-		this.nombre = nombre;
+	public void setNombre(String name) {
+		this.name = name;
 	}
-	
+
 	public String getUrl() {
-		return url;
+		return eliminationURL;
 	}
 	
-	public void setUrl(String url) {
-		this.url = url;
+	public void setUrl(String eliminationURL) {
+		this.eliminationURL = eliminationURL;
+	}
+	public String getMetadata() {
+		return consultURL;
+	}
+	public void setMetadata(String consultURL) {
+		this.consultURL =  consultURL;
 	}
 	
 }

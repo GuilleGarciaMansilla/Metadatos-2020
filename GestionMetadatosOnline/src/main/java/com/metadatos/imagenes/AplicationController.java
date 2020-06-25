@@ -14,6 +14,7 @@ import com.thebuzzmedia.exiftool.core.StandardTag;
 import com.thebuzzmedia.exiftool.ExifToolBuilder;
 import com.thebuzzmedia.exiftool.Tag;
 import java.io.File;
+import java.nio.file.Files;
 import java.util.Map;
 import static java.util.Arrays.asList;
 import java.util.HashMap;
@@ -39,18 +40,26 @@ public class AplicationController {
 	private String mostrarMetadatos(MultipartFile file) throws Exception {
 		File multToFile =convertToFile(file);
 		Map<Tag, String> meta =process(multToFile, null);
+		Map<Tag, String> metaNuevo = new HashMap<>();
+		for (Map.Entry<Tag, String> entry : meta.entrySet()) {
+			   if(entry.getValue()!=null && !entry.getValue().isEmpty() || !entry.getValue().equals("0")) {
+				   System.out.println("clave=" + entry.getKey() + ", valor=" + entry.getValue());
+			   	   metaNuevo.put(entry.getKey(), entry.getValue());
+				}
+		}
 		ObjectMapper objectMapper = new ObjectMapper();
-	    String metadatos = objectMapper.writeValueAsString(meta);
+	    String metadatos = objectMapper.writeValueAsString(metaNuevo);
 		return metadatos;
 	}
 		
 	
 	@RequestMapping(value="/metadatos/eliminar",method = RequestMethod.POST,consumes = "multipart/form-data")
 	
-	public ResponseEntity<File> eliminarMetadatos(@RequestParam("file") MultipartFile file) throws Exception {
+	public ResponseEntity<byte[]> eliminarMetadatos(@RequestParam("file") MultipartFile file) throws Exception {
 		File fileNuevo =removeMetadata(file);
-		if (fileNuevo!=null)
-			return new ResponseEntity<File>(fileNuevo, 
+		byte[] fileContent = Files.readAllBytes(fileNuevo.toPath());
+		if (fileContent!=null)
+			return new ResponseEntity<byte[]>(fileContent, 
 				   HttpStatus.OK);
 		else
 			return new ResponseEntity<>(null, 
@@ -62,8 +71,15 @@ public class AplicationController {
 	public File removeMetadata(MultipartFile file)
 			   throws Exception {
 	   File fileMetadataRemoved =convertToFile(file);
-       Map<Tag, String> meta = new HashMap<>();
-       meta.put(StandardTag.TITLE, "0");
+	   Map<Tag, String> metalectura =process(fileMetadataRemoved, null);
+	   Map<Tag, String> meta = new HashMap<>();
+	   for (Map.Entry<Tag, String> entry : metalectura.entrySet()) {
+		   if(entry.getValue()!=null && !entry.getValue().isEmpty() || !entry.getValue().equals("0"))
+		    System.out.println("clave=" + entry.getKey() + ", valor=" + entry.getValue());
+		   	meta.put(entry.getKey(), "0");
+	   }
+       
+      /* meta.put(StandardTag.TITLE, "0");
        meta.put(StandardTag.COPYRIGHT, "0");
        meta.put(StandardTag.ISO, "0");
        meta.put(StandardTag.IMAGE_WIDTH, "0");
@@ -163,7 +179,7 @@ public class AplicationController {
        meta.put(StandardTag.COPYRIGHT_NOTICE, "0");
        meta.put(StandardTag.FILE_TYPE, "0");
        meta.put(StandardTag.AVG_BITRATE, "0");
-	   meta.put(StandardTag.MIME_TYPE, "0");
+	   meta.put(StandardTag.MIME_TYPE, "0");*/
 	   process(fileMetadataRemoved, meta);
 	   return fileMetadataRemoved;
 	 }
